@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aerodynamics Labo Drone Cage</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="3D simulation of three Crazyflie drones in the Aerodynamics Labo net cage: virtual flow field and reinforcement-learned spacing from two Cluster Dynamics patents, with stackable obstacles, fans and air conditioners.">
+<meta property="og:title" content="Drone Swarm Simulation — Aerodynamics Labo Cage">
+<meta property="og:description" content="Three Crazyflie drones, a virtual flow field and a reinforcement-learned spacing table in a 3D digital twin of a lab cage.">
+<!--
+  Drone swarm simulation of the Aerodynamics Labo flight cage.
+  Open this file in Chrome or Edge (internet is needed for the 3D library and the fonts).
+  The structure of the code is explained in README.md.
+  エアロダイナミクス実験室のケージで3機のドローンを飛ばすシミュレーション。構成は README.md を参照。
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================================================================ header -->
+<div class="top"><div class="in wrap">
+  <div class="brand">
+    <h1><b>◆</b> <span data-i18n="title">Aerodynamics Labo Drone Cage</span></h1>
+    <span class="sub" data-i18n="subtitle">3 Crazyflie drones · virtual flow field + reinforcement learning</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="seg" id="lang" role="group" aria-label="Language">
+    <button id="lang-en" data-v="en">English</button><button id="lang-ja" data-v="ja">日本語</button>
+  </div>
+</div></div>
+
+<div class="sim wrap" id="sim">
+
+  <!-- ============================================================== left panel: settings -->
+  <aside class="side left">
+    <div class="sec">
+      <h3><span data-i18n="secRun">Run</span></h3>
+      <div class="btns"><button class="btn primary" id="play" data-i18n="pause">Pause</button><button class="btn" id="reset" data-i18n="reset">Fly again</button></div>
+      <div class="stack" style="margin-top:10px"><label data-i18n="speed">Simulation speed</label>
+        <div class="seg" id="speed"><button data-v="0.5">½×</button><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="4">4×</button></div>
+      </div>
+    </div>
+
+    <div class="sec" id="cage-size">
+      <h3><span data-i18n="secCage">Cage size</span><em data-i18n="secCageHint">type a value or drag</em></h3>
+      <div class="dim"><label for="cage-x" data-i18n="cageX">Length</label>
+        <span class="num"><input type="number" id="cage-x-num" min="3" max="10" step="0.1" value="5.5" aria-label="Length in metres"> m</span>
+        <input type="range" id="cage-x" min="3" max="10" step="0.1" value="5.5"></div>
+      <div class="dim"><label for="cage-y" data-i18n="cageY">Width</label>
+        <span class="num"><input type="number" id="cage-y-num" min="2" max="6" step="0.1" value="3.0" aria-label="Width in metres"> m</span>
+        <input type="range" id="cage-y" min="2" max="6" step="0.1" value="3.0"></div>
+      <div class="dim"><label for="cage-z" data-i18n="cageZ">Height</label>
+        <span class="num"><input type="number" id="cage-z-num" min="1.8" max="4" step="0.1" value="2.7" aria-label="Height in metres"> m</span>
+        <input type="range" id="cage-z" min="1.8" max="4" step="0.1" value="2.7"></div>
+      <div class="dim"><label for="alt" data-i18n="alt">Flight altitude</label>
+        <span class="num"><input type="number" id="alt-num" min="0.5" max="2.1" step="0.05" value="1.00" aria-label="Flight altitude in metres"> m</span>
+        <input type="range" id="alt" min="0.5" max="2.1" step="0.05" value="1.0"></div>
+      <div class="lh" id="lighthouse"></div>
+      <div class="btns" style="margin-top:8px"><button class="btn sm ghost" id="cage-reset" data-i18n="cageReset">Back to photo estimate</button></div>
+    </div>
+
+    <div class="sec">
+      <h3><span data-i18n="secNav">Guidance</span><em data-i18n="secNavHint">where to go</em></h3>
+      <div class="opts" id="nav">
+        <button class="opt" data-v="flow"><i class="dot"></i><b><span data-i18n="navFlow">Virtual flow field</span><span class="tag">2019</span></b><small data-i18n="navFlowD">Pressure on a 3D grid; drones drift with the flow to the target</small></button>
+        <button class="opt" data-v="direct"><i class="dot"></i><b data-i18n="navDirect">Straight to the target</b><small data-i18n="navDirectD">Head straight for the goal, dodge obstacles locally</small></button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span data-i18n="secForm">Spacing</span><em data-i18n="secFormHint">between the 3 drones</em></h3>
+      <div class="opts" id="form">
+        <button class="opt" data-v="rl"><i class="dot"></i><b><span data-i18n="formRL">Reinforcement learning</span><span class="tag">2022</span></b><small data-i18n="formRLD">Learned table a = f(r, v), no hand tuning</small></button>
+        <button class="opt" data-v="spring"><i class="dot"></i><b><span data-i18n="formSpring">Virtual springs</span><span class="tag">2019</span></b><small data-i18n="formSpringD">Spring–damper force, hand-tuned gains</small></button>
+        <button class="opt" data-v="none"><i class="dot"></i><b data-i18n="formNone">No interaction</b><small data-i18n="formNoneD">Each drone flies on its own</small></button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span data-i18n="secEnv">Room conditions</span></h3>
+      <label class="sw" for="lab-fan"><span><span data-i18n="labFan">Lab fan outside the net</span><small data-i18n="labFanD">about 1.2 m/s across the cage</small></span><input type="checkbox" id="lab-fan"></label>
+      <label class="sw" for="noise"><span><span data-i18n="noise">Position noise and radio loss</span><small data-i18n="noiseD">σ 2 cm, 10% of packets lost</small></span><input type="checkbox" id="noise"></label>
+      <label class="sw" for="wind-comp"><span><span data-i18n="windComp">Drones lean against the wind</span><small data-i18n="windCompD">each drone estimates the push and cancels it</small></span><input type="checkbox" id="wind-comp" checked></label>
+      <h4 data-i18n="airTitle">Fans and air conditioners in the cage</h4>
+      <div class="air-list" id="air-list"></div>
+    </div>
+
+    <div class="sec">
+      <h3><span data-i18n="secShow">Layers</span></h3>
+      <label class="sw" for="show-cells"><span data-i18n="showCells">Grid cells taken by obstacles</span><input type="checkbox" id="show-cells"></label>
+      <label class="sw" for="show-pressure"><span data-i18n="showPressure">Virtual pressure at flight altitude</span><input type="checkbox" id="show-pressure"></label>
+      <label class="sw" for="show-flow"><span data-i18n="showFlow">Virtual flow</span><input type="checkbox" id="show-flow" checked></label>
+      <label class="sw" for="show-air"><span data-i18n="showAir">Air from fans and air conditioners</span><input type="checkbox" id="show-air" checked></label>
+      <label class="sw" for="show-links"><span data-i18n="showLinks">Links between drones</span><input type="checkbox" id="show-links" checked></label>
+      <label class="sw" for="show-safety"><span data-i18n="showSafety">Safety zone around each drone</span><input type="checkbox" id="show-safety"></label>
+      <label class="sw" for="show-downwash"><span data-i18n="showDownwash">Downwash zones</span><input type="checkbox" id="show-downwash" checked></label>
+      <label class="sw" for="show-trails"><span data-i18n="showTrails">Flight trails</span><input type="checkbox" id="show-trails" checked></label>
+      <div class="stack" style="margin-top:6px"><label data-i18n="camera">Camera</label>
+        <div class="seg" id="camera"><button data-v="orbit" data-i18n="camOrbit">Free</button><button data-v="follow" data-i18n="camFollow">Follow</button><button data-v="top" data-i18n="camTop">Top</button><button data-v="door" data-i18n="camDoor">From door</button></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================== centre: 3D view and obstacle bar -->
+  <div class="center">
+    <div class="steps" id="steps"><span data-i18n="howTitle">How it works</span></div>
+    <main id="view">
+      <canvas id="c"></canvas>
+      <div class="hud tl">
+        <div class="chip"><span data-i18n="hudTime">Time</span> <span class="mono" id="hud-time">0.0 s</span></div>
+        <div class="chip status run" id="hud-status">—</div>
+        <div class="chip" id="hud-mode">—</div>
+      </div>
+      <div class="step-note" id="step-note" hidden></div>
+      <div class="hud bl"><div class="legend">
+        <div><i class="d" style="background:#ffb347"></i>CF1 <i class="d" style="background:#4fc3f7;margin-left:8px"></i>CF2 <i class="d" style="background:#f06aa8;margin-left:8px"></i>CF3</div>
+        <div><i style="background:#4fc3f7"></i><span data-i18n="lgFlow">Virtual flow</span></div>
+        <div><i class="air"></i><span data-i18n="lgAir">Air from fans and air conditioners</span></div>
+        <div><i style="background:#ff8f3f"></i><span data-i18n="lgLink">Too close → push apart</span></div>
+        <div><i style="background:#a78bfa"></i><span data-i18n="lgDw">Downwash zone</span></div>
+      </div></div>
+      <div class="hud br"><div class="chip note" id="scale-note"></div></div>
+      <div class="toast" id="toast" hidden></div>
+    </main>
+
+    <div class="tools">
+      <div class="trow"><label data-i18n="layouts">Layouts</label>
+        <div class="seg" id="layouts">
+          <button data-v="empty" data-i18n="layoutEmpty">Empty</button><button data-v="basic" data-i18n="layoutBasic">Basic</button><button data-v="gate" data-i18n="layoutGate">Ring gate</button><button data-v="maze" data-i18n="layoutMaze">Maze</button><button data-v="mixed" data-i18n="layoutMixed">Real furniture</button><button data-v="airflow" data-i18n="layoutAirflow">Stacks and airflow</button>
+        </div>
+      </div>
+      <div class="trow"><label data-i18n="addTitle">Add</label><div class="pal" id="palette"></div></div>
+      <div class="trow"><label data-i18n="editTitle">Edit</label>
+        <div class="btns">
+          <button class="btn" id="tool-select" data-i18n="toolSelect">Select / drag</button>
+          <button class="btn" id="tool-rotate" data-i18n="toolRotate">Rotate 90°</button>
+          <button class="btn" id="tool-delete" data-i18n="toolDelete">Delete selected</button>
+          <button class="btn ghost" id="tool-clear" data-i18n="toolClear">Clear all</button>
+        </div>
+      </div>
+      <div class="selected" id="selected" hidden></div>
+      <div class="hint" id="hint"></div>
+    </div>
+  </div>
+
+  <!-- ============================================================== right panel: live measurements -->
+  <aside class="side right">
+    <div class="sec"><h3><span data-i18n="secPhase">Mission phase</span></h3>
+      <div class="phasebar" id="phasebar"><span data-i18n="phTakeoff">Take-off</span><span data-i18n="phTransit">Transit</span><span data-i18n="phLand">Landing</span><span data-i18n="phDone">Done</span></div>
+    </div>
+    <div class="sec"><h3><span data-i18n="secLive">Live telemetry</span></h3>
+      <div class="tiles">
+        <div class="tile" id="tile-land"><div class="k" data-i18n="tileLand">Landed at target</div><div class="v" id="val-land">0<small>/3</small></div></div>
+        <div class="tile" id="tile-crash"><div class="k" data-i18n="tileCrash">Collisions</div><div class="v" id="val-crash">0</div></div>
+        <div class="tile" id="tile-sep"><div class="k" data-i18n="tileSep">Closest pair</div><div class="v" id="val-sep">—<small>cm</small></div></div>
+        <div class="tile" id="tile-obs"><div class="k" data-i18n="tileObs">Obstacles</div><div class="v" id="val-obs">0</div></div>
+      </div>
+    </div>
+    <div class="sec"><h3><span data-i18n="secDrones">Each drone</span><em>Crazyflie 2.1 Brushless</em></h3><div id="drones"></div></div>
+    <div class="sec"><h3><span data-i18n="chartSep">Closest distance between two drones</span><em>cm</em></h3>
+      <canvas class="chart" id="chart-sep"></canvas>
+      <div class="keys"><span><i style="background:#ff5a5f"></i><span data-i18n="chartSepTouch">props touch at 12 cm</span></span><span><i style="background:#3a4b58"></i><span data-i18n="chartSepTarget">target 50 cm</span></span></div>
+    </div>
+    <div class="sec"><h3><span data-i18n="chartAlt">Altitude of each drone</span><em>m</em></h3><canvas class="chart" id="chart-alt"></canvas></div>
+    <div class="sec"><h3><span data-i18n="secLog">Event log</span></h3><div class="log" id="log"></div></div>
+  </aside>
+</div>
+
+<!-- ================================================================ comparison test -->
+<section class="cmp wrap" id="compare"><div class="card">
+  <h2 data-i18n="cmpTitle">Comparison test</h2>
+  <p id="compare-desc"></p>
+  <div class="btns"><button class="btn primary" id="compare-run" data-i18n="cmpRun">Run the comparison</button></div>
+  <div class="prog"><i id="compare-bar"></i></div>
+  <div class="tblwrap"><table id="compare-table"></table></div>
+  <p class="note" id="compare-foot" style="margin-top:10px"></p>
+</div></section>
+<footer class="wrap" id="foot"></footer>
+
+<!-- ================================================================ scripts -->
+<!-- 3D library: Three.js r147 -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- The simulation itself (no browser needed; tools/run_benchmark.js runs the same files in Node.js) -->
+<script src="js/sim/config.js"></script>
+<script src="js/sim/util.js"></script>
+<script src="js/sim/cage.js"></script>
+<script src="js/sim/obstacles.js"></script>
+<script src="js/sim/airflow.js"></script>
+<script src="js/sim/scenario.js"></script>
+<script src="js/sim/flowfield.js"></script>
+<script src="js/sim/policy-table.js"></script>
+<script src="js/sim/policy.js"></script>
+<script src="js/sim/swarm.js"></script>
+
+<!-- The page: 3D view, obstacle editor, panels -->
+<script src="js/app/state.js"></script>
+<script src="js/app/i18n.js"></script>
+<script src="js/app/scene.js"></script>
+<script src="js/app/models.js"></script>
+<script src="js/app/overlays.js"></script>
+<script src="js/app/editor.js"></script>
+<script src="js/app/controls.js"></script>
+<script src="js/app/panels.js"></script>
+<script src="js/app/steps.js"></script>
+<script src="js/app/compare.js"></script>
+<script src="js/app/main.js"></script>
+</body>
+</html>
